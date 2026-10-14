@@ -1,5 +1,4 @@
 
-Here is the script you need to copy and paste into your workflow file. It handles checking out your code, setting up the Java environment, building the APK with Gradle, and uploading the finished APK as an artifact.
 name: Build Android APK
 on:
   push:
