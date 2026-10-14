@@ -1,33 +1,63 @@
-name: Build Android APK
+name: Build Daylight Planner APK
 
 on:
+  workflow_dispatch:
   push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+    branches: [main]
+
+permissions:
+  contents: read
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Extract Android project from uploaded ZIP
+        run: |
+          set -eux
+          if [ -f DaylightPlannerAndroid-source.zip ]; then
+            ZIP_FILE="DaylightPlannerAndroid-source.zip"
+          elif [ -f DaylightPlannerAndroid-source-1.zip ]; then
+            ZIP_FILE="DaylightPlannerAndroid-source-1.zip"
+          else
+            ZIP_FILE="$(find . -maxdepth 3 -name 'DaylightPlannerAndroid-source*.zip' -print -quit)"
+          fi
+          test -n "$ZIP_FILE"
+          mkdir -p /tmp/daylight-source
+          unzip -q "$ZIP_FILE" -d /tmp/daylight-source
+          PROJECT_DIR="$(find /tmp/daylight-source -type f -name settings.gradle.kts -printf '%h\n' | head -n 1)"
+          test -n "$PROJECT_DIR"
+          cp -a "$PROJECT_DIR"/. .
+          test -f settings.gradle.kts
+          test -f app/build.gradle.kts
 
       - name: Set up JDK
         uses: actions/setup-java@v4
         with:
+          distribution: temurin
           java-version: '17'
-          distribution: 'temurin'
 
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
 
-      - name: Build APK with Gradle
-        run: ./gradlew assembleDebug
+      - name: Install Android SDK platform
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
 
-      - name: Upload APK
+      - name: Install Gradle
+        run: |
+          curl -fsSL https://services.gradle.org/distributions/gradle-8.9-bin.zip -o /tmp/gradle.zip
+          unzip -q /tmp/gradle.zip -d /tmp
+          echo "/tmp/gradle-8.9/bin" >> "$GITHUB_PATH"
+
+      - name: Build debug APK
+        run: gradle --no-daemon assembleDebug
+
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-debug
+          name: Daylight-Planner-debug-APK
           path: app/build/outputs/apk/debug/app-debug.apk
-
+          if-no-files-found: error
