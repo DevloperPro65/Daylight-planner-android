@@ -1,2 +1,2 @@
 # Daylight-planner-android
-Jai shree ram
+ram Sita ram
