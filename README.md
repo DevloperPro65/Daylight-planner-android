@@ -1,2 +1,2 @@
 # Daylight-planner-android
-hello world hello
+hello world
