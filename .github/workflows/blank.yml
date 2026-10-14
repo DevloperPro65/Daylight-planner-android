@@ -1,9 +1,9 @@
 name: Build Daylight Planner APK
-
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches:
+      - main
 
 permissions:
   contents: read
@@ -11,28 +11,44 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Extract Android project from uploaded ZIP
+      - name: Find and extract Android project ZIP
+        shell: bash
         run: |
-          set -eux
-          if [ -f DaylightPlannerAndroid-source.zip ]; then
-            ZIP_FILE="DaylightPlannerAndroid-source.zip"
-          elif [ -f DaylightPlannerAndroid-source-1.zip ]; then
-            ZIP_FILE="DaylightPlannerAndroid-source-1.zip"
-          else
-            ZIP_FILE="$(find . -maxdepth 3 -name 'DaylightPlannerAndroid-source*.zip' -print -quit)"
+          set -euo pipefail
+
+          ZIP_FILE="$(find . -type f -name 'DaylightPlannerAndroid-source*.zip' -not -path './.git/*' -print -quit)"
+
+          if [ -z "$ZIP_FILE" ]; then
+            echo "ERROR: DaylightPlannerAndroid-source ZIP was not found in the repository."
+            exit 1
           fi
-          test -n "$ZIP_FILE"
-          mkdir -p /tmp/daylight-source
-          unzip -q "$ZIP_FILE" -d /tmp/daylight-source
-          PROJECT_DIR="$(find /tmp/daylight-source -type f -name settings.gradle.kts -printf '%h\n' | head -n 1)"
-          test -n "$PROJECT_DIR"
-          cp -a "$PROJECT_DIR"/. .
-          test -f settings.gradle.kts
-          test -f app/build.gradle.kts
+
+          mkdir -p /tmp/daylight-project
+          unzip -q "$ZIP_FILE" -d /tmp/daylight-project
+
+          SETTINGS_FILE="$(find /tmp/daylight-project -type f -name 'settings.gradle.kts' -print -quit)"
+
+          if [ -z "$SETTINGS_FILE" ]; then
+            echo "ERROR: settings.gradle.kts was not found inside the ZIP."
+            exit 1
+          fi
+
+          PROJECT_DIR="$(dirname "$SETTINGS_FILE")"
+
+          if [ ! -f "$PROJECT_DIR/app/build.gradle.kts" ]; then
+            echo "ERROR: app/build.gradle.kts was not found."
+            exit 1
+          fi
+
+          cp -a "$PROJECT_DIR"/. "$GITHUB_WORKSPACE"/
+
+          test -f "$GITHUB_WORKSPACE/settings.gradle.kts"
+          test -f "$GITHUB_WORKSPACE/app/build.gradle.kts"
 
       - name: Set up JDK
         uses: actions/setup-java@v4
@@ -43,11 +59,14 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install Android SDK platform
-        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - name: Install Android SDK components
+        run: |
+          sdkmanager "platforms;android-35" "build-tools;35.0.0"
 
       - name: Install Gradle
+        shell: bash
         run: |
+          set -euo pipefail
           curl -fsSL https://services.gradle.org/distributions/gradle-8.9-bin.zip -o /tmp/gradle.zip
           unzip -q /tmp/gradle.zip -d /tmp
           echo "/tmp/gradle-8.9/bin" >> "$GITHUB_PATH"
